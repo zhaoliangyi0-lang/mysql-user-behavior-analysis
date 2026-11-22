@@ -9,4 +9,4 @@ USE taobao;
 
 DESC user_behavior;
 SELECT * FROM user_behavior LIMIT 5;
-SELECT COUNT(1) FROM user_behavior;   -- 剩余 999489 条
+SELECT COUNT(1) FROM user_behavior;   -- 全量清洗后的行数，以实际执行结果为准

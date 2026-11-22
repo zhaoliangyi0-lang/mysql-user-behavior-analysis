@@ -29,7 +29,7 @@ USE taobao;
 -- ────────────────────────────────────────────────
 -- ⚠️ 这里【故意不用】 DROP TABLE IF EXISTS。
 --    其余文件建结果表都带 DROP，是为了脚本能重复执行；
---    但 user_behavior 是唯一的源表，DROP 一下 100 万行就没了，
+--    但 user_behavior 是唯一的源表，DROP 一下全量数据就没了，
 --    重跑这个文件等于清库。所以改用 CREATE TABLE IF NOT EXISTS，
 --    已存在就跳过，绝不误删数据。
 CREATE TABLE IF NOT EXISTS user_behavior (
@@ -90,4 +90,4 @@ SELECT COUNT(1) AS 当前行数 FROM user_behavior;
 --     索引：idx_user_id / idx_item_id / idx_category_id
 --           / idx_behavior_type / idx_timestamps
 --     引擎 InnoDB，字符集 utf8mb4，排序规则 utf8mb4_0900_ai_ci
---     清洗完成后的行数：999489
+--     清洗完成后的行数：以全量去重后的实际结果为准
