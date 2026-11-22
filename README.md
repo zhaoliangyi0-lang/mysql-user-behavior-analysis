@@ -135,8 +135,4 @@ images/                    仪表板快照（新框架重建中）
 2. 全表操作需要索引支撑。加购事件的窗口函数依赖 `(user_id, item_id)` 上的顺序扫描；
    转化配对若明显偏慢，补建 `(user_id, item_id, behavior_type, timestamps)` 联合索引。
 
-## 关于
 
-赵梁屹，中国石油大学（北京）金融学专业本科生。
-
-GitHub：https://github.com/zhaoliangyi0-lang
