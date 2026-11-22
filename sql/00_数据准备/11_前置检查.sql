@@ -27,15 +27,30 @@ SELECT VERSION()          AS 版本,
 SHOW COLUMNS FROM user_behavior;
 
 -- ────────────────────────────────────────────────
--- 【检查 2】总行数、时间范围与覆盖天数
+-- 【检查 2】总行数、时间范围与异常时间戳
 -- ────────────────────────────────────────────────
-SELECT COUNT(*)                                AS 总行数,
-       MIN(timestamps)                         AS 最早时间戳,
-       MAX(timestamps)                         AS 最晚时间戳,
-       FROM_UNIXTIME(MIN(timestamps))          AS 最早时间,
-       FROM_UNIXTIME(MAX(timestamps))          AS 最晚时间,
-       ROUND((MAX(timestamps) - MIN(timestamps)) / 86400, 2) AS 覆盖天数
+-- 2026-11-22 实测：总行数 100,095,496，但 MIN(timestamps) = -2134949234，
+-- 导致 FROM_UNIXTIME 返回 NULL、覆盖天数失真。说明存在异常时间戳，
+-- 所以这里把「全量」与「正常范围」分开统计。
+SELECT COUNT(*) AS 总行数,
+       SUM(timestamps < 0 OR timestamps > 2147483647) AS 越界时间戳行数,
+       SUM(timestamps IS NULL)                        AS 空时间戳行数,
+       MIN(CASE WHEN timestamps BETWEEN 0 AND 2147483647 THEN timestamps END) AS 正常最早时间戳,
+       MAX(CASE WHEN timestamps BETWEEN 0 AND 2147483647 THEN timestamps END) AS 正常最晚时间戳,
+       FROM_UNIXTIME(MIN(CASE WHEN timestamps BETWEEN 0 AND 2147483647 THEN timestamps END)) AS 正常最早时间,
+       FROM_UNIXTIME(MAX(CASE WHEN timestamps BETWEEN 0 AND 2147483647 THEN timestamps END)) AS 正常最晚时间,
+       ROUND((MAX(CASE WHEN timestamps BETWEEN 0 AND 2147483647 THEN timestamps END)
+            - MIN(CASE WHEN timestamps BETWEEN 0 AND 2147483647 THEN timestamps END)) / 86400, 2) AS 正常覆盖天数
 FROM user_behavior;
+
+-- 【检查 2b】异常时间戳样本：先看清是什么，再决定删除还是修正
+SELECT id, user_id, item_id, category_id, behavior_type, timestamps, datetimes
+FROM user_behavior
+WHERE timestamps < 0 OR timestamps > 2147483647
+LIMIT 20;
+
+-- 确认是脏数据后，可剔除（实测 318 行，约占 0.0003%）：
+-- DELETE FROM user_behavior WHERE timestamps < 0 OR timestamps > 2147483647;
 
 -- ────────────────────────────────────────────────
 -- 【检查 3】每天的行数分布（关键）
@@ -100,31 +115,26 @@ FROM (
 ) t;
 
 -- ────────────────────────────────────────────────
--- 【检查 8】加购行为的时间覆盖
+-- 【检查 8】加购行为的时间覆盖（轻量版）
 -- ────────────────────────────────────────────────
--- 加购事件构造要用相邻加购的间隔。若加购集中在极短时间，
--- 30 分钟阈值可能把大量记录并成少数事件，阈值需重新评估。
-SELECT COUNT(*)                                 AS 加购行数,
-       COUNT(DISTINCT user_id)                  AS 加购用户数,
-       COUNT(DISTINCT item_id)                  AS 加购商品数,
-       FROM_UNIXTIME(MIN(timestamps))           AS 最早加购,
-       FROM_UNIXTIME(MAX(timestamps))           AS 最晚加购,
+-- 加购行数与去重用户/商品已在【检查 4】【检查 5】给出，这里只看时间覆盖。
+-- 去掉 COUNT(DISTINCT ...)：1 亿行上它会生成大临时表，是上一版跑不完的主因。
+SELECT COUNT(*)  AS 加购行数,
+       FROM_UNIXTIME(MIN(timestamps))  AS 最早加购,
+       FROM_UNIXTIME(MAX(timestamps))  AS 最晚加购,
        ROUND((MAX(timestamps) - MIN(timestamps)) / 3600, 2) AS 覆盖小时数
 FROM user_behavior
-WHERE behavior_type = 'cart';
+WHERE behavior_type = 'cart'
+  AND timestamps BETWEEN 0 AND 2147483647;
 
 -- ────────────────────────────────────────────────
--- 【检查 9】同一用户-商品对的加购次数分布
+-- 【检查 9】单对加购次数分布（本项可跳过）
 -- ────────────────────────────────────────────────
--- 极端最大值通常意味着刷单或异常重复，需在报告中说明。
-SELECT MAX(cnt) AS 单对最大加购次数,
-       ROUND(AVG(cnt), 2) AS 单对平均加购次数,
-       SUM(cnt > 1) AS 多次加购的组合数
-FROM (
-    SELECT user_id,
-           item_id,
-           COUNT(*) AS cnt
-    FROM user_behavior
-    WHERE behavior_type = 'cart'
-    GROUP BY user_id, item_id
-) t;
+-- ⚠️ 1 亿行上按 (user_id, item_id) 分组会全表扫描并生成大临时表，
+--    在 4G 缓冲池下可能跑几十分钟。它不是事件构造的前置条件，
+--    改到 dwd_cart_event 建好后统计，代价小得多：
+--
+--        SELECT MAX(cart_cnt)  AS 单对最大加购次数,
+--               ROUND(AVG(cart_cnt), 2) AS 单对平均加购次数,
+--               SUM(cart_cnt > 1) AS 多次加购的事件数
+--        FROM dwd_cart_event;
