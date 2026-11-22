@@ -60,7 +60,7 @@ CREATE TABLE dwd_cart_convert (
 --   first_buy        每个用户-商品的首次购买时间，判断复购型加购
 --   data_bounds      数据集观测终点，判断右删失
 --
--- ⚠️ 性能：buy_in_window 是对全量 1 亿行的关联扫描，是 M2 最重的查询。
+-- ⚠️ 性能：buy_in_window 是对全量 9100 万行的关联扫描，是 M2 最重的查询。
 --    执行前先补联合索引，并预留足够的临时表空间：
 --        CREATE INDEX idx_user_item_behavior
 --            ON user_behavior (user_id, item_id, behavior_type, timestamps);
@@ -88,7 +88,6 @@ INSERT INTO dwd_cart_convert (
 WITH data_bounds AS (
     SELECT MAX(timestamps) AS max_ts
     FROM user_behavior
-    WHERE timestamps BETWEEN 0 AND 2147483647
 ),
 event_with_next AS (
     SELECT
@@ -108,7 +107,6 @@ buy_in_window AS (
         ON b.user_id = e.user_id
        AND b.item_id = e.item_id
        AND b.behavior_type = 'buy'
-       AND b.timestamps BETWEEN 0 AND 2147483647
        AND b.timestamps >= e.event_start_ts
        AND b.timestamps < LEAST(
                e.event_start_ts + 604800,
@@ -123,7 +121,6 @@ first_buy AS (
         MIN(timestamps) AS first_buy_ts
     FROM user_behavior
     WHERE behavior_type = 'buy'
-      AND timestamps BETWEEN 0 AND 2147483647
     GROUP BY user_id, item_id
 )
 SELECT

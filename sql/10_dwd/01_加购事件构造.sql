@@ -49,7 +49,7 @@ CREATE TABLE dwd_cart_event (
 --   cart_marked    间隔 > 1800 秒或没有上一条 → 新事件标记 1
 --   cart_eventized 按用户-商品做前缀和，得到事件序号
 --
--- 全量约 1 亿行时，这段会触发大规模排序与临时表，耗时可能以小时计。
+-- 全量约 9100 万行时，这段会触发大规模排序与临时表，耗时可能以小时计。
 -- 执行建议：
 --   1. 先建 (user_id, item_id) 联合索引；
 --   2. 调大 sort_buffer_size 与 tmp_table_size；
@@ -73,7 +73,6 @@ WITH cart_dedup AS (
         timestamps
     FROM user_behavior
     WHERE behavior_type = 'cart'
-      AND timestamps BETWEEN 0 AND 2147483647
 ),
 cart_lagged AS (
     SELECT

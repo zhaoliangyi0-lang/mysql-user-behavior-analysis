@@ -7,7 +7,7 @@
 
 USE taobao;
 
--- 逐列统计 NULL 行数。全量表约 1 亿行，各列均有索引，但仍建议逐列执行、观察耗时。
+-- 逐列统计 NULL 行数。全量表约 9100 万行，各列均有索引，但仍建议逐列执行、观察耗时。
 SELECT COUNT(*) FROM user_behavior WHERE user_id       IS NULL;
 SELECT COUNT(*) FROM user_behavior WHERE item_id       IS NULL;
 SELECT COUNT(*) FROM user_behavior WHERE category_id   IS NULL;
